@@ -25,6 +25,7 @@ from agno.db.schemas.culture import CulturalKnowledge
 from agno.db.schemas.evals import EvalFilterType, EvalRunRecord, EvalType
 from agno.db.schemas.knowledge import KnowledgeRow
 from agno.db.schemas.memory import UserMemory
+from agno.db.utils import deserialize_session_json_fields, serialize_session_json_fields
 from agno.session import AgentSession, Session, TeamSession, WorkflowSession
 from agno.utils.log import log_debug, log_error, log_info, log_warning
 from agno.utils.string import generate_id
@@ -531,7 +532,7 @@ class AsyncMySQLDb(AsyncBaseDb):
                 if row is None:
                     return None
 
-                session = dict(row._mapping)
+                session = deserialize_session_json_fields(dict(row._mapping))
 
             if not deserialize:
                 return session
@@ -634,7 +635,7 @@ class AsyncMySQLDb(AsyncBaseDb):
                 if records is None:
                     return [], 0
 
-                session = [dict(record._mapping) for record in records]
+                session = [deserialize_session_json_fields(dict(record._mapping)) for record in records]
                 if not deserialize:
                     return session, total_count
 
@@ -703,7 +704,7 @@ class AsyncMySQLDb(AsyncBaseDb):
 
             log_debug(f"Renamed session with id '{session_id}' to '{session_name}'")
 
-            session = dict(row._mapping)
+            session = deserialize_session_json_fields(dict(row._mapping))
             if not deserialize:
                 return session
 
@@ -741,7 +742,7 @@ class AsyncMySQLDb(AsyncBaseDb):
         """
         try:
             table = await self._get_table(table_type="sessions", create_table_if_not_found=True)
-            session_dict = session.to_dict()
+            session_dict = serialize_session_json_fields(session.to_dict())
 
             if isinstance(session, AgentSession):
                 async with self.async_session_factory() as sess, sess.begin():
@@ -788,13 +789,13 @@ class AsyncMySQLDb(AsyncBaseDb):
                     row = result.fetchone()
                     if row is None:
                         return None
-                    session_dict = dict(row._mapping)
+                    session_raw = deserialize_session_json_fields(dict(row._mapping))
 
-                    log_debug(f"Upserted agent session with id '{session_dict.get('session_id')}'")
+                    log_debug(f"Upserted agent session with id '{session_raw.get('session_id')}'")
 
                     if not deserialize:
-                        return session_dict
-                    return AgentSession.from_dict(session_dict)
+                        return session_raw
+                    return AgentSession.from_dict(session_raw)
 
             elif isinstance(session, TeamSession):
                 async with self.async_session_factory() as sess, sess.begin():
@@ -841,13 +842,13 @@ class AsyncMySQLDb(AsyncBaseDb):
                     row = result.fetchone()
                     if row is None:
                         return None
-                    session_dict = dict(row._mapping)
+                    session_raw = deserialize_session_json_fields(dict(row._mapping))
 
-                    log_debug(f"Upserted team session with id '{session_dict.get('session_id')}'")
+                    log_debug(f"Upserted team session with id '{session_raw.get('session_id')}'")
 
                     if not deserialize:
-                        return session_dict
-                    return TeamSession.from_dict(session_dict)
+                        return session_raw
+                    return TeamSession.from_dict(session_raw)
 
             elif isinstance(session, WorkflowSession):
                 async with self.async_session_factory() as sess, sess.begin():
@@ -894,13 +895,13 @@ class AsyncMySQLDb(AsyncBaseDb):
                     row = result.fetchone()
                     if row is None:
                         return None
-                    session_dict = dict(row._mapping)
+                    session_raw = deserialize_session_json_fields(dict(row._mapping))
 
-                    log_debug(f"Upserted workflow session with id '{session_dict.get('session_id')}'")
+                    log_debug(f"Upserted workflow session with id '{session_raw.get('session_id')}'")
 
                     if not deserialize:
-                        return session_dict
-                    return WorkflowSession.from_dict(session_dict)
+                        return session_raw
+                    return WorkflowSession.from_dict(session_raw)
 
             else:
                 raise ValueError(f"Invalid session type: {session.session_type}")
@@ -953,21 +954,21 @@ class AsyncMySQLDb(AsyncBaseDb):
                 if agent_sessions:
                     agent_data = []
                     for session in agent_sessions:
-                        session_dict = session.to_dict()
+                        serialized_session = serialize_session_json_fields(session.to_dict())
                         # Use preserved updated_at if flag is set and value exists, otherwise use current time
-                        updated_at = session_dict.get("updated_at") if preserve_updated_at else int(time.time())
+                        updated_at = serialized_session.get("updated_at") if preserve_updated_at else int(time.time())
                         agent_data.append(
                             {
-                                "session_id": session_dict.get("session_id"),
+                                "session_id": serialized_session.get("session_id"),
                                 "session_type": SessionType.AGENT.value,
-                                "agent_id": session_dict.get("agent_id"),
-                                "user_id": session_dict.get("user_id"),
-                                "runs": session_dict.get("runs"),
-                                "agent_data": session_dict.get("agent_data"),
-                                "session_data": session_dict.get("session_data"),
-                                "summary": session_dict.get("summary"),
-                                "metadata": session_dict.get("metadata"),
-                                "created_at": session_dict.get("created_at"),
+                                "agent_id": serialized_session.get("agent_id"),
+                                "user_id": serialized_session.get("user_id"),
+                                "runs": serialized_session.get("runs"),
+                                "agent_data": serialized_session.get("agent_data"),
+                                "session_data": serialized_session.get("session_data"),
+                                "summary": serialized_session.get("summary"),
+                                "metadata": serialized_session.get("metadata"),
+                                "created_at": serialized_session.get("created_at"),
                                 "updated_at": updated_at,
                             }
                         )
@@ -993,7 +994,7 @@ class AsyncMySQLDb(AsyncBaseDb):
                         fetched_rows = result.fetchall()
 
                         for row in fetched_rows:
-                            session_dict = dict(row._mapping)
+                            session_dict = deserialize_session_json_fields(dict(row._mapping))
                             if deserialize:
                                 deserialized_agent_session = AgentSession.from_dict(session_dict)
                                 if deserialized_agent_session is None:
@@ -1006,21 +1007,21 @@ class AsyncMySQLDb(AsyncBaseDb):
                 if team_sessions:
                     team_data = []
                     for session in team_sessions:
-                        session_dict = session.to_dict()
+                        serialized_session = serialize_session_json_fields(session.to_dict())
                         # Use preserved updated_at if flag is set and value exists, otherwise use current time
-                        updated_at = session_dict.get("updated_at") if preserve_updated_at else int(time.time())
+                        updated_at = serialized_session.get("updated_at") if preserve_updated_at else int(time.time())
                         team_data.append(
                             {
-                                "session_id": session_dict.get("session_id"),
+                                "session_id": serialized_session.get("session_id"),
                                 "session_type": SessionType.TEAM.value,
-                                "team_id": session_dict.get("team_id"),
-                                "user_id": session_dict.get("user_id"),
-                                "runs": session_dict.get("runs"),
-                                "team_data": session_dict.get("team_data"),
-                                "session_data": session_dict.get("session_data"),
-                                "summary": session_dict.get("summary"),
-                                "metadata": session_dict.get("metadata"),
-                                "created_at": session_dict.get("created_at"),
+                                "team_id": serialized_session.get("team_id"),
+                                "user_id": serialized_session.get("user_id"),
+                                "runs": serialized_session.get("runs"),
+                                "team_data": serialized_session.get("team_data"),
+                                "session_data": serialized_session.get("session_data"),
+                                "summary": serialized_session.get("summary"),
+                                "metadata": serialized_session.get("metadata"),
+                                "created_at": serialized_session.get("created_at"),
                                 "updated_at": updated_at,
                             }
                         )
@@ -1046,7 +1047,7 @@ class AsyncMySQLDb(AsyncBaseDb):
                         fetched_rows = result.fetchall()
 
                         for row in fetched_rows:
-                            session_dict = dict(row._mapping)
+                            session_dict = deserialize_session_json_fields(dict(row._mapping))
                             if deserialize:
                                 deserialized_team_session = TeamSession.from_dict(session_dict)
                                 if deserialized_team_session is None:
@@ -1059,21 +1060,21 @@ class AsyncMySQLDb(AsyncBaseDb):
                 if workflow_sessions:
                     workflow_data = []
                     for session in workflow_sessions:
-                        session_dict = session.to_dict()
+                        serialized_session = serialize_session_json_fields(session.to_dict())
                         # Use preserved updated_at if flag is set and value exists, otherwise use current time
-                        updated_at = session_dict.get("updated_at") if preserve_updated_at else int(time.time())
+                        updated_at = serialized_session.get("updated_at") if preserve_updated_at else int(time.time())
                         workflow_data.append(
                             {
-                                "session_id": session_dict.get("session_id"),
+                                "session_id": serialized_session.get("session_id"),
                                 "session_type": SessionType.WORKFLOW.value,
-                                "workflow_id": session_dict.get("workflow_id"),
-                                "user_id": session_dict.get("user_id"),
-                                "runs": session_dict.get("runs"),
-                                "workflow_data": session_dict.get("workflow_data"),
-                                "session_data": session_dict.get("session_data"),
-                                "summary": session_dict.get("summary"),
-                                "metadata": session_dict.get("metadata"),
-                                "created_at": session_dict.get("created_at"),
+                                "workflow_id": serialized_session.get("workflow_id"),
+                                "user_id": serialized_session.get("user_id"),
+                                "runs": serialized_session.get("runs"),
+                                "workflow_data": serialized_session.get("workflow_data"),
+                                "session_data": serialized_session.get("session_data"),
+                                "summary": serialized_session.get("summary"),
+                                "metadata": serialized_session.get("metadata"),
+                                "created_at": serialized_session.get("created_at"),
                                 "updated_at": updated_at,
                             }
                         )
@@ -1099,7 +1100,7 @@ class AsyncMySQLDb(AsyncBaseDb):
                         fetched_rows = result.fetchall()
 
                         for row in fetched_rows:
-                            session_dict = dict(row._mapping)
+                            session_dict = deserialize_session_json_fields(dict(row._mapping))
                             if deserialize:
                                 deserialized_workflow_session = WorkflowSession.from_dict(session_dict)
                                 if deserialized_workflow_session is None:
